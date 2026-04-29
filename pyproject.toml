@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "higgsfield-unlimited-mcp"
+version = "0.1.0"
+description = "MCP server for Higgsfield AI in unlimited mode (bypasses credit system via Clerk session auth)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "CG Labs" }]
+keywords = ["mcp", "higgsfield", "ai", "image-generation"]
+
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "aiohttp>=3.9.0",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+higgsfield-unlimited-mcp = "higgsfield_unlimited_mcp.__main__:main"
+higgsfield-unlimited-verify = "higgsfield_unlimited_mcp.verify:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/higgsfield_unlimited_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
