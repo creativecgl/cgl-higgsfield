@@ -4,7 +4,24 @@ A complete MCP server for [Higgsfield AI](https://higgsfield.ai) that calls the 
 
 **What's covered:** image generation (32 models), video generation (31 models), audio (TTS), storyboards (multi-shot continuity), workspaces, media library, assets, favourites, generation history, account/plan info, job cancellation — everything the official Higgsfield MCP exposes, plus video, audio, storyboard, and cancel that the official MCP doesn't.
 
-> Private use only. Requires an active Higgsfield subscription with unlimited mode enabled.
+> Requires an active Higgsfield subscription with unlimited mode enabled.
+
+---
+
+## Quick Install
+
+**Requirements:** Python 3.10+, [Claude Code](https://claude.ai/code)
+
+```bash
+pip install git+https://github.com/creativecgl/higgsfield-unlimited-mcp.git
+```
+
+Or with `uvx` (no install needed, runs ephemerally):
+```bash
+uvx --from git+https://github.com/creativecgl/higgsfield-unlimited-mcp.git higgsfield-unlimited-mcp
+```
+
+Then jump to [Setup](#setup) to wire up your credentials.
 
 ---
 
@@ -84,46 +101,36 @@ A complete MCP server for [Higgsfield AI](https://higgsfield.ai) that calls the 
 
 ## Setup
 
-### 1. Get your credentials (one-time, ~2 min)
+### 1. Get your Higgsfield credentials (~2 min)
 
-Open `https://higgsfield.ai` in Chrome while logged in.
+Open [https://higgsfield.ai](https://higgsfield.ai) in Chrome while logged in.
 
 **`__client` cookie:**
-- DevTools → Application → Cookies → `https://higgsfield.ai`
-- Copy the value of the `__client` cookie
+1. Open DevTools (`Cmd+Option+I`)
+2. Go to **Application** → **Cookies** → `https://higgsfield.ai`
+3. Copy the value of the `__client` cookie
 
 **Session ID:**
-- DevTools → Console → run: `window.Clerk.session.id`
-- Copy the result (starts with `sess_`)
+1. Open DevTools → **Console**
+2. Run: `window.Clerk.session.id`
+3. Copy the result — it starts with `sess_`
 
 ### 2. Install
 
-**From the local clone:**
 ```bash
-cd higgsfield-unlimited-mcp
-pip install -e .
+pip install git+https://github.com/creativecgl/higgsfield-unlimited-mcp.git
 ```
 
-**From a private GitHub repo (after pushing):**
+To update later:
 ```bash
-pip install git+https://<token>@github.com/<you>/higgsfield-unlimited-mcp.git
+pip install --upgrade git+https://github.com/creativecgl/higgsfield-unlimited-mcp.git
 ```
 
-Or `uvx` for ephemeral runs:
-```bash
-uvx --from git+https://<token>@github.com/<you>/higgsfield-unlimited-mcp.git higgsfield-unlimited-mcp
-```
+### 3. Add to Claude Code
 
-### 3. Configure
+Open (or create) your Claude Code MCP config and add the following. Paste your credentials into the `env` block — they never leave your machine.
 
-Copy `.env.example` to `.env` and fill in your credentials, **or** pass them as env vars in your MCP client config.
-
-```bash
-cp .env.example .env
-# then edit .env
-```
-
-### 4. Register with Claude Code
+**Location:** `~/.claude.json` (user-level, works across all projects)
 
 ```json
 {
@@ -132,7 +139,7 @@ cp .env.example .env
       "command": "python",
       "args": ["-m", "higgsfield_unlimited_mcp"],
       "env": {
-        "HIGGSFIELD_CLERK_COOKIE": "<paste cookie value>",
+        "HIGGSFIELD_CLERK_COOKIE": "<paste your __client cookie here>",
         "HIGGSFIELD_SESSION_ID": "sess_xxxxxxxxxxxxx",
         "HIGGSFIELD_MAX_CONCURRENT": "4",
         "HIGGSFIELD_DEFAULT_MODEL": "nano-banana-2",
@@ -143,68 +150,31 @@ cp .env.example .env
 }
 ```
 
-Or via CLI:
+Or register via the Claude Code CLI:
 ```bash
 claude mcp add higgsfield-unlimited -s user -- python -m higgsfield_unlimited_mcp
 ```
+Then set the env vars in `~/.claude.json` as shown above.
 
-### 5. Verify
+### 4. Verify it's working
 
-**Standalone smoke test (recommended after install):**
+Run the built-in smoke test after install:
+
 ```bash
-higgsfield-unlimited-verify              # full check: auth + GETs + 1 test gen + download
-higgsfield-unlimited-verify --skip-generate  # auth + GETs only, no submission
-higgsfield-unlimited-verify --keep-output    # keep the test image after success
-```
-Or via Python:
-```bash
-python -m higgsfield_unlimited_mcp.verify
+# Full check: auth + API endpoints + 1 test image generation + download
+higgsfield-unlimited-verify
+
+# Auth + API checks only (no generation, no credits used)
+higgsfield-unlimited-verify --skip-generate
+
+# Keep the test image after success
+higgsfield-unlimited-verify --keep-output
 ```
 
-**Inside Claude Code:**
+Or test from inside Claude Code:
 ```
-> Use higgsfield-unlimited to check auth_status, then account_info.
+Use higgsfield-unlimited to check auth_status, then account_info.
 ```
-
----
-
-## Usage examples
-
-**Storyboard batch (no waiting):**
-```
-Generate this 11-shot storyboard at 2k 9:16, fire-and-forget.
-```
-Calls `generate_image_batch(prompts=[...], wait=False, tag_prefix="shot")`, then `queue_status` / `list_jobs(status="completed")`.
-
-**Single video at Veo 3 1080p:**
-```
-Generate a 5-second 16:9 video with Veo 3: "drone shot of a desert pyramid at sunset".
-```
-Calls `generate_video(prompt=..., model="veo3", duration=5, resolution="1080p")`.
-
-**Image-to-video with auto-upload (one step):**
-```
-Animate ./Assets/Character\ 1.png with seedance for 5s, 720, 16:9.
-```
-Calls `generate_video(model="seedance", input_files=["./Assets/Character 1.png"], duration=5, resolution="720", aspect_ratio="16:9")` — the file is uploaded server-side and used as the input image automatically.
-
-**Storyboard with character continuity:**
-```
-Use ./Assets/Character\ 1.png as the reference and generate this 5-shot storyboard at 2k 9:16.
-```
-Calls `generate_storyboard(prompts=[...], reference_files=["./Assets/Character 1.png"], resolution="2k", aspect_ratio="9:16")` — uploads the ref once and shares it across every shot via `nano-banana-2-shots`.
-
-**Cancel a runaway video:**
-```
-Cancel job <id>.
-```
-Calls `cancel_job(job_id="...")` (DELETE /jobs/{id}).
-
-**Inspect plan & balances:**
-```
-What's my Higgsfield plan?
-```
-Calls `account_info` — returns `has_unlim`, plan type, all per-feature credit balances.
 
 ---
 
@@ -214,17 +184,60 @@ Calls `account_info` — returns `has_unlim`, plan type, all per-feature credit 
 |---|---|---|
 | `HIGGSFIELD_CLERK_COOKIE` | *(required)* | The `__client` cookie from your browser. |
 | `HIGGSFIELD_SESSION_ID` | *(required)* | `window.Clerk.session.id`. |
-| `HIGGSFIELD_MAX_CONCURRENT` | `4` | Max parallel jobs (match your plan tier). |
-| `HIGGSFIELD_DEFAULT_MODEL` | `nano-banana-2` | Image model when not specified. |
+| `HIGGSFIELD_MAX_CONCURRENT` | `4` | Max parallel jobs (match your plan tier: 4/8/12/16). |
+| `HIGGSFIELD_DEFAULT_MODEL` | `nano-banana-2` | Image model used when not specified. |
 | `HIGGSFIELD_DEFAULT_RESOLUTION` | `2k` | One of `1k`, `2k`, `4k`. |
 | `HIGGSFIELD_OUTPUT_DIR` | `./higgsfield_output` | Default download directory. |
 | `HIGGSFIELD_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
 ---
 
+## Usage examples
+
+**Generate a single image:**
+```
+Generate a 2k 16:9 image: "ancient Egyptian temple at golden hour, cinematic lighting"
+```
+
+**Batch storyboard (fire-and-forget):**
+```
+Generate this 11-shot storyboard at 2k 9:16, fire-and-forget.
+```
+Calls `generate_image_batch(prompts=[...], wait=False)`, then check progress with `queue_status`.
+
+**Single video at Veo 3 1080p:**
+```
+Generate a 5-second 16:9 video with Veo 3: "drone shot of a desert pyramid at sunset"
+```
+
+**Image-to-video with auto-upload (one step):**
+```
+Animate ./Assets/Character 1.png with seedance for 5s, 720p, 16:9
+```
+Calls `generate_video(model="seedance", input_files=["./Assets/Character 1.png"], ...)` — the file is uploaded automatically.
+
+**Storyboard with character continuity:**
+```
+Use ./Assets/Character 1.png as the reference and generate this 5-shot storyboard at 2k 9:16
+```
+Uploads the ref once and shares it across every shot.
+
+**Cancel a runaway job:**
+```
+Cancel job <id>
+```
+
+**Check plan & balances:**
+```
+What's my Higgsfield plan?
+```
+Returns `has_unlim`, plan type, and all per-feature credit balances.
+
+---
+
 ## How auth works
 
-Higgsfield's web app authenticates with a short-lived JWT (~5 min TTL) issued by Clerk. The long-lived `__client` cookie lets us mint fresh JWTs as needed:
+Higgsfield's web app uses a short-lived JWT (~5 min TTL) issued by Clerk. The long-lived `__client` cookie lets us mint fresh JWTs on demand:
 
 ```
 POST https://clerk.higgsfield.ai/v1/client/sessions/{session_id}/tokens
@@ -232,80 +245,34 @@ Cookie: __client=<your cookie>
 → { "jwt": "..." }
 ```
 
-The MCP server caches the JWT and proactively refreshes every 4 minutes. On a 401, it invalidates and retries once.
+The MCP server caches the JWT and proactively refreshes it every 4 minutes. On a 401, it invalidates and retries once automatically.
 
-The generation call differs from the paid path only by `"use_unlim": true` in both the `params` object and the top-level body:
+Unlimited mode is enabled by setting `"use_unlim": true` in both the `params` object and the top-level request body:
 
-```
+```json
 POST https://fnf.higgsfield.ai/jobs/{model}
 Authorization: Bearer <jwt>
 {
-  "params": { ..., "use_unlim": true },
-  "use_unlim": true,
-  "use_seedream_bonus": false
+  "params": { "...", "use_unlim": true },
+  "use_unlim": true
 }
 ```
 
 See [`docs/EXTENDING.md`](docs/EXTENDING.md) for how to add new endpoints, and [`docs/MODEL_SCHEMAS.md`](docs/MODEL_SCHEMAS.md) for per-model required-field reference.
 
-> **Important:** Each video model has different required fields (e.g. `seedance` needs `input_image`, `kling` needs a sub-variant `model` ID, `veo3` needs `enhance_prompt` and `seed`). When `generate_video` returns a 422 error, the message tells you exactly which fields to add via `extra_params` — or use `generate_raw` to pass the params dict directly.
-
----
-
-## Discovered API surface
-
-The full endpoint map (all under `https://fnf.higgsfield.ai`):
-
-```
-Generation:
-  POST /jobs/{model}                       — submit (60+ models)
-  GET  /jobs/{job_id}/status               — poll
-  GET  /jobs/accessible                    — recent jobs
-
-Account:
-  GET  /user                               — plan + credit balances
-  GET  /user/profile                       — profile
-  GET  /user/features                      — feature flags
-  GET  /user/meta
-
-Workspaces (39 endpoints):
-  GET  /workspaces                         — list
-  GET  /workspaces/details                 — current workspace
-  GET  /workspaces/wallet                  — credit balance
-  GET  /workspaces/members
-  GET  /workspaces/credit-ledger/usage-chart
-  POST /workspaces/rename
-  …and 33 more (billing, invites, plans, payment cards)
-
-Media:
-  GET  /media/accessible                   — paginated library
-  POST /media/batch
-  POST /media/download-batch
-  GET  /media/status
-
-Assets:
-  GET  /assets, /assets/favourites
-  POST /assets/favourites/like, /unlike
-  POST /assets/publish/v2, /unpublish/v2
-
-Concurrency:
-  GET  /concurrent-boost-credits/state
-  POST /concurrent-boost-credits/enable, /disable, /purchase
-
-Upload:
-  POST /upload                             — multipart media upload
-```
+> **Video model note:** Each video model has different required fields. When `generate_video` returns a 422 error, the message tells you exactly which fields to add via `extra_params`. You can also use `generate_raw` to pass the full params dict directly.
 
 ---
 
 ## Security
 
-- **Never commit `.env`.** It's in `.gitignore` already.
-- The cookie + session ID are equivalent to your logged-in browser. Treat them as credentials.
-- For team use: each member sets up with their own Higgsfield account.
+- **Never commit your `.env` file.** It's in `.gitignore` by default.
+- Your `__client` cookie + session ID are equivalent to your logged-in browser session. Treat them like a password.
+- Credentials passed via MCP `env` config stay local — they are never sent anywhere except Higgsfield's own API.
+- For team use: each member should set up with their own Higgsfield account and credentials.
 
 ---
 
 ## License
 
-MIT.
+MIT
