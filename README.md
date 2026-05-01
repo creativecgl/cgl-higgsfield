@@ -187,8 +187,23 @@ Use higgsfield-unlimited to check auth_status, then account_info.
 | `HIGGSFIELD_MAX_CONCURRENT` | `4` | Max parallel jobs (match your plan tier: 4/8/12/16). |
 | `HIGGSFIELD_DEFAULT_MODEL` | `nano-banana-2` | Image model used when not specified. |
 | `HIGGSFIELD_DEFAULT_RESOLUTION` | `2k` | One of `1k`, `2k`, `4k`. |
-| `HIGGSFIELD_OUTPUT_DIR` | `./higgsfield_output` | Default download directory. |
+| `HIGGSFIELD_OUTPUT_DIR` | *(see below)* | Default download directory. |
 | `HIGGSFIELD_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+
+### Where do generated files go?
+
+Resolution priority (top wins):
+
+1. **Per-call `output_dir` argument** — pass `output_dir` to any `generate_*` tool to send that one batch elsewhere.
+2. **`HIGGSFIELD_OUTPUT_DIR` env var** — explicit global default. Set this if you want every gen to land in the same fixed folder regardless of where you launched Claude Code.
+3. **`<cwd>/higgsfield_output/`** — automatic per-project fallback. Whatever folder Claude Code was launched in becomes the project root, and outputs go to its `higgsfield_output/` subfolder.
+
+**Recommended pattern:** leave `HIGGSFIELD_OUTPUT_DIR` unset in `~/.claude.json`, then launch Claude Code from each project folder. Outputs auto-route per project. The MCP logs the resolved output path on startup so you always know where things land.
+
+```
+2026-04-30 18:42:11 [INFO] higgsfield_unlimited_mcp.server: Higgsfield Unlimited MCP ready (model=nano-banana-2, res=2k, slots=4)
+2026-04-30 18:42:11 [INFO] higgsfield_unlimited_mcp.server: Output directory (default): /Users/you/Projects/Anubis/higgsfield_output
+```
 
 ---
 

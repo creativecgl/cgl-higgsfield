@@ -40,13 +40,27 @@ class Settings:
                 "window.Clerk.session.id"
             )
 
+        # Output dir resolution priority:
+        #   1. Per-call `output_dir` argument on a tool   (handled in server.py)
+        #   2. HIGGSFIELD_OUTPUT_DIR env var               (explicit global default)
+        #   3. <cwd>/higgsfield_output/                    (auto-routes per project)
+        #
+        # The cwd default means: launch Claude Code from a project folder, and
+        # outputs land in that project's higgsfield_output/ subfolder. No config
+        # needed for per-project routing.
+        env_output = os.getenv("HIGGSFIELD_OUTPUT_DIR", "").strip()
+        if env_output:
+            output_dir = Path(env_output).expanduser().resolve()
+        else:
+            output_dir = (Path.cwd() / "higgsfield_output").resolve()
+
         return cls(
             clerk_cookie=cookie,
             session_id=session,
             max_concurrent=int(os.getenv("HIGGSFIELD_MAX_CONCURRENT", "4")),
             default_model=os.getenv("HIGGSFIELD_DEFAULT_MODEL", "nano-banana-2"),
             default_resolution=os.getenv("HIGGSFIELD_DEFAULT_RESOLUTION", "2k"),
-            output_dir=Path(os.getenv("HIGGSFIELD_OUTPUT_DIR", "./higgsfield_output")).expanduser(),
+            output_dir=output_dir,
             log_level=os.getenv("HIGGSFIELD_LOG_LEVEL", "INFO").upper(),
         )
 

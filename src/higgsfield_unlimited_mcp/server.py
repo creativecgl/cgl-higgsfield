@@ -84,6 +84,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         "Higgsfield Unlimited MCP ready (model=%s, res=%s, slots=%d)",
         settings.default_model, settings.default_resolution, settings.max_concurrent,
     )
+    log.info("Output directory (default): %s", settings.output_dir)
 
     try:
         yield AppContext(
