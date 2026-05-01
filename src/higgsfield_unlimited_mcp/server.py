@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
-import aiohttp
+from curl_cffi.requests import AsyncSession
 from mcp.server.fastmcp import Context, FastMCP
 
 from .auth import TokenManager
@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class AppContext:
     settings: Settings
-    http: aiohttp.ClientSession
+    http: AsyncSession
     tokens: TokenManager
     client: HiggsfieldClient
     registry: JobRegistry
@@ -62,9 +62,17 @@ async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     settings = Settings.from_env()
     configure_logging(settings.log_level)
 
-    connector = aiohttp.TCPConnector(limit=settings.max_concurrent + 8)
-    timeout = aiohttp.ClientTimeout(total=None, connect=20, sock_read=60)
-    http = aiohttp.ClientSession(connector=connector, timeout=timeout)
+    # curl_cffi impersonates a real Chrome TLS handshake, defeating the
+    # Cloudflare bot challenge that blocks default aiohttp/requests on
+    # fnf.higgsfield.ai's /jobs/* endpoints.
+    http = AsyncSession(
+        impersonate="chrome131",
+        timeout=120,
+        headers={
+            "Origin": "https://higgsfield.ai",
+            "Referer": "https://higgsfield.ai/",
+        },
+    )
 
     tokens = TokenManager(settings.session_id, settings.clerk_cookie)
     client = HiggsfieldClient(http, tokens)

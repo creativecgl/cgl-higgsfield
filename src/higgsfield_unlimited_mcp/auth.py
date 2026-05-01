@@ -3,6 +3,9 @@
 The Higgsfield web app authenticates with a short-lived JWT (~5 min TTL)
 issued by Clerk. We refresh proactively every 4 minutes using the long-lived
 __client cookie + session ID extracted from the user's browser.
+
+HTTP transport is curl_cffi (impersonating Chrome) to defeat Cloudflare
+bot fingerprinting on fnf.higgsfield.ai.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import logging
 import time
 from typing import Optional
 
-import aiohttp
+from curl_cffi.requests import AsyncSession
 
 from .errors import AuthError
 
@@ -35,7 +38,7 @@ class TokenManager:
         self._fetched_at: float = 0.0
         self._lock = asyncio.Lock()
 
-    async def get_token(self, http: aiohttp.ClientSession, force: bool = False) -> str:
+    async def get_token(self, http: AsyncSession, force: bool = False) -> str:
         """Return a valid JWT, refreshing if it's been > 4 min."""
         async with self._lock:
             now = time.time()
@@ -51,10 +54,10 @@ class TokenManager:
             self._token = None
             self._fetched_at = 0.0
 
-    async def _fetch(self, http: aiohttp.ClientSession) -> str:
+    async def _fetch(self, http: AsyncSession) -> str:
         url = CLERK_TOKEN_URL.format(session_id=self._session_id)
         try:
-            async with http.post(
+            resp = await http.post(
                 url,
                 data={"organization_id": ""},
                 headers={
@@ -63,19 +66,20 @@ class TokenManager:
                     "Origin": "https://higgsfield.ai",
                     "Referer": "https://higgsfield.ai/",
                 },
-            ) as resp:
-                if resp.status == 401 or resp.status == 403:
-                    body = await resp.text()
-                    raise AuthError(
-                        f"Clerk auth rejected (HTTP {resp.status}). Your __client cookie or "
-                        f"session ID is invalid or expired. Re-extract from Chrome DevTools. "
-                        f"Body: {body[:200]}"
-                    )
-                resp.raise_for_status()
-                data = await resp.json()
-        except aiohttp.ClientError as e:
+            )
+        except Exception as e:
             raise AuthError(f"Network error talking to Clerk: {e}") from e
 
+        if resp.status_code in (401, 403):
+            raise AuthError(
+                f"Clerk auth rejected (HTTP {resp.status_code}). Your __client cookie or "
+                f"session ID is invalid or expired. Re-extract from Chrome DevTools. "
+                f"Body: {resp.text[:200]}"
+            )
+        if resp.status_code >= 400:
+            raise AuthError(f"Clerk request failed (HTTP {resp.status_code}): {resp.text[:200]}")
+
+        data = resp.json()
         token = data.get("jwt")
         if not token:
             raise AuthError(f"No 'jwt' field in Clerk response: {data}")

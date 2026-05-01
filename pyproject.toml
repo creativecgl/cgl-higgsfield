@@ -14,7 +14,7 @@ keywords = ["mcp", "higgsfield", "ai", "image-generation"]
 
 dependencies = [
     "mcp[cli]>=1.2.0",
-    "aiohttp>=3.9.0",
+    "curl_cffi>=0.7.0",
     "pydantic>=2.5.0",
     "python-dotenv>=1.0.0",
 ]

@@ -29,7 +29,7 @@ import sys
 import time
 from pathlib import Path
 
-import aiohttp
+from curl_cffi.requests import AsyncSession
 
 from .auth import TokenManager
 from .client import HiggsfieldClient
@@ -72,9 +72,14 @@ async def run(skip_generate: bool, keep_output: bool) -> int:
         _fail(str(e))
         return 1
 
-    connector = aiohttp.TCPConnector(limit=10)
-    timeout = aiohttp.ClientTimeout(total=None, connect=20, sock_read=60)
-    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as http:
+    async with AsyncSession(
+        impersonate="chrome131",
+        timeout=120,
+        headers={
+            "Origin": "https://higgsfield.ai",
+            "Referer": "https://higgsfield.ai/",
+        },
+    ) as http:
         tokens = TokenManager(settings.session_id, settings.clerk_cookie)
         client = HiggsfieldClient(http, tokens)
 

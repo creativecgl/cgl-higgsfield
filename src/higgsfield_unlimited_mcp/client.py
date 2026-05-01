@@ -50,7 +50,7 @@ import asyncio
 import logging
 from typing import Any, Optional
 
-import aiohttp
+from curl_cffi.requests import AsyncSession
 
 from .auth import TokenManager
 from .config import resolve_model
@@ -72,7 +72,7 @@ POLL_BACKOFF_STEP = 2
 class HiggsfieldClient:
     """Async client for the Higgsfield generation API in unlimited mode."""
 
-    def __init__(self, http: aiohttp.ClientSession, tokens: TokenManager):
+    def __init__(self, http: AsyncSession, tokens: TokenManager):
         self._http = http
         self._tokens = tokens
 
@@ -101,28 +101,29 @@ class HiggsfieldClient:
         if extra_headers:
             headers.update(extra_headers)
 
-        async with self._http.request(
+        # curl_cffi AsyncSession: returns Response directly (no context manager).
+        resp = await self._http.request(
             method, url, json=json, params=params, data=raw_data, headers=headers
-        ) as resp:
-            if resp.status == 401 and retry_on_401:
-                log.warning("Got 401 — refreshing token and retrying once")
-                await self._tokens.invalidate()
-                return await self._request(
-                    method, path_or_url, json=json, params=params,
-                    retry_on_401=False, raw_data=raw_data, extra_headers=extra_headers,
-                )
-            text = await resp.text()
-            if resp.status >= 400:
-                raise JobSubmitError(
-                    f"{method} {url} → HTTP {resp.status}: {text[:300]}"
-                )
-            content_type = resp.headers.get("Content-Type", "")
-            if "application/json" in content_type:
-                try:
-                    return await resp.json(content_type=None)
-                except Exception:
-                    return text
-            return text
+        )
+        if resp.status_code == 401 and retry_on_401:
+            log.warning("Got 401 — refreshing token and retrying once")
+            await self._tokens.invalidate()
+            return await self._request(
+                method, path_or_url, json=json, params=params,
+                retry_on_401=False, raw_data=raw_data, extra_headers=extra_headers,
+            )
+        text = resp.text
+        if resp.status_code >= 400:
+            raise JobSubmitError(
+                f"{method} {url} → HTTP {resp.status_code}: {text[:300]}"
+            )
+        content_type = resp.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            try:
+                return resp.json()
+            except Exception:
+                return text
+        return text
 
     # ─────────── generation ───────────
 
@@ -414,30 +415,34 @@ class HiggsfieldClient:
         Returns the uploaded media descriptor (typically with id/url) that can
         be passed as input_images=[url] to subsequent generation calls.
         """
-        form = aiohttp.FormData()
-        form.add_field("file", file_bytes, filename=filename, content_type=content_type)
+        from curl_cffi import CurlMime
+
         url = f"{API_BASE}/upload"
+
+        def _build_mime() -> CurlMime:
+            m = CurlMime()
+            m.addpart(name="file", filename=filename, data=file_bytes, content_type=content_type)
+            return m
+
         headers = await self._auth_headers()
-        async with self._http.post(url, data=form, headers=headers) as resp:
-            text = await resp.text()
-            if resp.status == 401:
-                await self._tokens.invalidate()
-                headers = await self._auth_headers()
-                async with self._http.post(url, data=form, headers=headers) as resp2:
-                    text = await resp2.text()
-                    if resp2.status >= 400:
-                        raise JobSubmitError(f"upload → HTTP {resp2.status}: {text[:300]}")
-                    return await resp2.json(content_type=None)
-            if resp.status >= 400:
-                raise JobSubmitError(f"upload → HTTP {resp.status}: {text[:300]}")
-            return await resp.json(content_type=None)
+        mp = _build_mime()
+        resp = await self._http.post(url, multipart=mp, headers=headers)
+        if resp.status_code == 401:
+            await self._tokens.invalidate()
+            headers = await self._auth_headers()
+            mp = _build_mime()
+            resp = await self._http.post(url, multipart=mp, headers=headers)
+        if resp.status_code >= 400:
+            raise JobSubmitError(f"upload → HTTP {resp.status_code}: {resp.text[:300]}")
+        return resp.json()
 
     # ─────────── downloads & result helpers ───────────
 
     async def download(self, image_url: str) -> bytes:
-        async with self._http.get(image_url) as resp:
-            resp.raise_for_status()
-            return await resp.read()
+        resp = await self._http.get(image_url)
+        if resp.status_code >= 400:
+            raise JobSubmitError(f"download → HTTP {resp.status_code}")
+        return resp.content
 
     @staticmethod
     def extract_result_urls(result: dict) -> list[str]:
