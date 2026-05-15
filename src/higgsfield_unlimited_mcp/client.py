@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from typing import Any, Optional
 
 from curl_cffi.requests import AsyncSession
@@ -191,6 +192,7 @@ class HiggsfieldClient:
         input_images: Optional[list[str]] = None,
         is_storyboard: bool = False,
         is_zoom_control: bool = False,
+        seed: Optional[int] = None,
         extra_params: Optional[dict[str, Any]] = None,
     ) -> str:
         """Convenience wrapper for image generation."""
@@ -207,6 +209,10 @@ class HiggsfieldClient:
         }
         if extra_params:
             params.update(extra_params)
+        if seed is not None:
+            params["seed"] = seed
+        else:
+            params["seed"] = random.randint(0, 2147483647)
         return await self.submit_job(model=model, params=params)
 
     async def submit_video_job(
